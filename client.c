@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <fcntl.h>
 
 typedef struct sockaddr_in sockaddr_in;
 
@@ -22,7 +23,7 @@ int join_network(sockaddr_in a, int my_port, char *ip_addr) {
 		exit(1);
 	}
 
-	printf("Ready");
+	printf("Ready\n");
 	return cfd;
 }
 
@@ -33,9 +34,9 @@ void not_block(int fd) {
 
 void communicate(int cfd) {
 	char name[31];
-	char s_response[11];
-	int response, bytes;
-	while (1) {
+	char response[11];
+	int bytes;
+	for (;;) {
 		if (fgets(name, sizeof(name), stdin) == NULL) {
 			close(cfd);
 			exit(0);
@@ -43,17 +44,16 @@ void communicate(int cfd) {
 		
 		bytes = write(cfd, name, sizeof(name));
 		if (bytes <= 0) {
-			fprintf(stderr, "%s\n", strerror(errno));
+			fprintf(stderr, "ERRNO write %d: %s\n", errno, strerror(errno));
 			exit(1);	
 		}
 
-		bytes = read(cfd, &s_response, sizeof(s_response));
-		if (bytes <= 0 || (bytes >= 11 && strchr(s_response, '\n') == NULL)) {
-			fprintf(stderr, "%s\n", strerror(errno));
+		bytes = read(cfd, &response, sizeof(response));
+		if (bytes <= 0 || (bytes >= 11 && strchr(response, '\n') == NULL)) {
+			fprintf(stderr, "ERRNO read %d: %s\n", errno, strerror(errno));
 			exit(1);
 		}
-		sscanf(s_response, "%d", &response);
-		printf("%d\n", response);
+		printf("%s", response);
 	}	
 }
 
@@ -63,6 +63,6 @@ int main(int argc, char *argv[]) {
 
 	sscanf(argv[2], "%d", &my_port);
 	int cfd = join_network(a, my_port, argv[1]); 
-	not_block(cfd);
+	//not_block(cfd);
 	communicate(cfd);	
 }
