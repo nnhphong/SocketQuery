@@ -47,7 +47,7 @@ int setup_server(sockaddr_in a, int my_port, char *ip_addr) {
 
 	int sfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (bind(sfd, (struct sockaddr *)&a, sizeof(sockaddr_in)) == -1) {
-		fprintf(stderr, "Cannot establish the connection.\n");
+		perror(strerror(errno));
 		exit(1);
 	}
 	
@@ -88,8 +88,7 @@ void add_new_client(int sfd, int *client_list, int *num_client, fd_set *fd_reads
 
 	client_list[*num_client] = new_cfd;
 	(*num_client)++;
-
-	print_client_address("Got client", &ca);
+//	print_client_address("Got client", &ca);
 }
 
 void delete_client(int *cfd, int i, int *num_clients) {
@@ -114,20 +113,19 @@ bool handle_incident(int i, int *cfd, int *num_clients) {
 
 bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 	unsigned short ret;
-	char query[30];
-	char response[11] = "none\n";
-	int bytes;
+	char q[30];
+	char resp[11] = "none\n";
 	
-	bytes = read(cfd[i], query, sizeof(query));
-	if (bytes <= 0 || !strcmp(query, "")) {
+	int bytes = read(cfd[i], q, sizeof(q));
+	if (bytes <= 0 || (bytes >= 30 && strchr(resp, '\n') == NULL) || !strcmp(q, "")) {
 		return handle_incident(i, cfd, num_clients);
 	}
 
-	if (get_sunspots(f, query, &ret)) {
-		sprintf(response, "%d\n", ret);
+	if (get_sunspots(f, q, &ret)) {
+		sprintf(resp, "%d\n", ret);
 	}
 
-	bytes = write(cfd[i], response, strlen(response) + 1);
+	write(cfd[i], resp, strlen(resp) + 1);
 	return 1;
 }
 
@@ -149,7 +147,7 @@ void run_server(sockaddr_in a, int sfd, FILE *f) {
 		for (int i = 0; i < num_clients; i++) {
 			if (!FD_ISSET(cfd[i], &read_fds)) continue;
 
-			printf("Talking to client %d\n", i);
+			//printf("Talking to client %d\n", i);
 			i -= (!talk_to_client(i, cfd, &num_clients, f));
 		}
 	}
