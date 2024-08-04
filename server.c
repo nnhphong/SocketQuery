@@ -52,11 +52,6 @@ int setup_server(sockaddr_in a, int my_port, char *ip_addr) {
 	}
 	
 	listen(sfd, 4096);
-
-	/*int opt = 1;
-	if (setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof opt) < 0){
-      
-    }*/	
 	return sfd;
 }
 
@@ -90,8 +85,10 @@ void add_new_client(int sfd, int *client_list, int *num_client, fd_set *fd_reads
 	
 	not_block(new_cfd);
 	FD_SET(new_cfd, fd_reads);
+
 	client_list[*num_client] = new_cfd;
 	(*num_client)++;
+
 	print_client_address("Got client", &ca);
 }
 
@@ -103,29 +100,29 @@ void delete_client(int *cfd, int i, int *num_clients) {
 	(*num_clients)--;
 }
 
-bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
-	unsigned short ret;
-	char query[30];
-	char response[11];
-	int bytes;
-	
-	memset(query, 0, sizeof(query));
-	printf("server is reading..\n");
-	bytes = read(cfd[i], query, sizeof(query));
-	printf("server finish reading %d, %d %d!\n", bytes, errno, EAGAIN);
-	if (bytes <= 0 || !strcmp(query, "")) {
-		if (errno != EAGAIN) {
-			fprintf(stderr, "ERRNO read %d: %s\n", errno, strerror(errno));
-			delete_client(cfd, i, num_clients);
-			return 0;
-		}
+bool handle_incident(int i, int *cfd, int *num_clients) {
+	if (errno == EAGAIN) {
+		// reset errno (as SIGINT on client doesnt get notified)
 		errno = 0;
 		return 1;
 	}
+		
+	fprintf(stderr, "ERRNO read %d: %s\n", errno, strerror(errno));
+	delete_client(cfd, i, num_clients);
+	return 0;
+}
 
-//	printf("Received: %s, bytes = %d, cmp = %d\n", query, bytes, strcmp(query, ""));
+bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
+	unsigned short ret;
+	char query[30];
+	char response[11] = "none\n";
+	int bytes;
+	
+	bytes = read(cfd[i], query, sizeof(query));
+	if (bytes <= 0 || !strcmp(query, "")) {
+		return handle_incident(i, cfd, num_clients);
+	}
 
-	strcpy(response, "none\n");
 	if (get_sunspots(f, query, &ret)) {
 		sprintf(response, "%d\n", ret);
 	}
@@ -150,11 +147,10 @@ void run_server(sockaddr_in a, int sfd, FILE *f) {
 		}
 
 		for (int i = 0; i < num_clients; i++) {
-			if (FD_ISSET(cfd[i], &read_fds)) {
-				printf("Talking to client %d\n", i);
-				if (!talk_to_client(i, cfd, &num_clients, f))
-					--i;
-			}
+			if (!FD_ISSET(cfd[i], &read_fds)) continue;
+
+			printf("Talking to client %d\n", i);
+			i -= (!talk_to_client(i, cfd, &num_clients, f));
 		}
 	}
 }
