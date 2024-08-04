@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <signal.h>
+#include <stdbool.h>
 #include "record.h"
 
 typedef struct sockaddr_in sockaddr_in;
@@ -59,9 +60,10 @@ void print_client_address(const char *prefix, const struct sockaddr_in *ptr) {
 	printf("%s: %s port %d\n", prefix, dot_notation, ntohs(ptr->sin_port));
 }
 
-int max_fds(int sfd, int cfd[], int num_clients) {
+int max_fds(int sfd, int cfd[], int num_clients, fd_set *read_fds) {
 	int mx = sfd;
 	for (int i = 0; i < num_clients; i++) {
+		FD_SET(cfd[i], read_fds);
 		if (cfd[i] > mx) {
 			mx = cfd[i];
 		}
@@ -69,13 +71,15 @@ int max_fds(int sfd, int cfd[], int num_clients) {
 	return mx;
 }
 
-void add_new_client(int sfd, int *client_list, int *num_client) {
+void add_new_client(int sfd, int *client_list, int *num_client, fd_set *read_fds) {
 	sockaddr_in ca;
 	int sin_len = sizeof(sockaddr_in);
 	int new_cfd = accept(sfd, (struct sockaddr*)&ca, &sin_len);
-
+	
+	FD_SET(new_cfd, read_fds);
 	client_list[*num_client] = new_cfd;
-	*(num_client)++;
+	(*num_client)++;
+	print_client_address("Got client", &ca);
 }
 
 void delete_client(int *cfd, int i, int *num_clients) {
@@ -86,8 +90,8 @@ void delete_client(int *cfd, int i, int *num_clients) {
 	*(num_clients)--;
 }
 
-void talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
-	/*unsigned short ret;
+bool talk_to_client(int i, int *cfd, FILE *f, int *num_clients) {
+	unsigned short ret;
 	char query[30];
 	char response[11];
 	int bytes;
@@ -96,39 +100,48 @@ void talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 	if (bytes <= 0) {
 		fprintf(stderr, "ERRNO read %d: %s\n", errno, strerror(errno));
 		delete_client(cfd, i, num_clients);
-		return;
+		return 0;
 	}
-	if (!strcmp(query, "")) return;
+	if (!strcmp(query, "")) return 1; 
 
 	strcpy(response, "none\n");
 	if (get_sunspots(f, query, &ret)) {
 		sprintf(response, "%d\n", ret);
 	}
 
-	bytes = write(cfd[i], response, sizeof(response));*/
-	printf("Talking to client %d, with cfd = %d...\n", i, cfd[i]);
+	bytes = write(cfd[i], response, sizeof(response));
+	return 1;
 }
 
 void run_server(sockaddr_in a, int sfd, FILE *f) {
 	int cfd[1024];
+	bool is_opened[1024];
 	int num_clients = 0;
 	fd_set read_fds;
 	
 	for (;;) {
 		FD_ZERO(&read_fds);
-		int max_fd = max_fds(sfd, cfd, num_clients);
+		FD_SET(sfd, &read_fds);
+		int max_fd = max_fds(sfd, cfd, num_clients, &read_fds);
 
 		while (select(max_fd + 1, &read_fds, NULL, NULL, NULL) == -1) {}
 		if (FD_ISSET(sfd, &read_fds)) {
-			add_new_client(sfd, cfd, &num_clients);
-			print_client_address("Got client", &a);
+			add_new_client(sfd, cfd, &num_clients, &read_fds);
 		}
-
-		for (int i = 0; i < max_fd; i++) {
+		
+		for (int i = 0; i < num_clients; i++) {
 			if (FD_ISSET(cfd[i], &read_fds)) {
-				talk_to_client(i, cfd, &num_clients, f);						
+				//is_opened[i] = 
+				talk_to_client(i, cfd, f, &num_clients);	
 			}
 		}
+		/*for (int i = 0; i < num_clients; i++) {
+			if (!is_opened[i]) {
+//				printf("Server: I'm deleting client %i\n", i);
+				delete_client(cfd, i, &num_clients);
+				i--;
+			}
+		}*/
 	}
 }
 
