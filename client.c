@@ -42,7 +42,7 @@ void communicate(int cfd) {
 			exit(0);
 		}
 		
-		bytes = write(cfd, name, sizeof(name));
+		bytes = write(cfd, name, strlen(name) + 1);
 		if (bytes <= 0) {
 			fprintf(stderr, "ERRNO write %d: %s\n", errno, strerror(errno));
 			exit(1);	
