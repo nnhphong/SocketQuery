@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #include "record.h"
 
 typedef struct sockaddr_in sockaddr_in;
@@ -99,10 +100,10 @@ void delete_client(int *cfd, int i, int *num_clients) {
 	for (int j = i + 1; j < *(num_clients); j++) {
 		cfd[j - 1] = cfd[j];
 	}
-	*(num_clients)--;
+	(*num_clients)--;
 }
 
-void talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
+bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 	unsigned short ret;
 	char query[30];
 	char response[11];
@@ -111,15 +112,16 @@ void talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 	memset(query, 0, sizeof(query));
 	printf("server is reading..\n");
 	bytes = read(cfd[i], query, sizeof(query));
-	printf("server finish reading!\n");
-	if (bytes <= 0) {
+	printf("server finish reading %d, %d %d!\n", bytes, errno, EAGAIN);
+	if (bytes <= 0 || !strcmp(query, "")) {
 		if (errno != EAGAIN) {
 			fprintf(stderr, "ERRNO read %d: %s\n", errno, strerror(errno));
 			delete_client(cfd, i, num_clients);
+			return 0;
 		}
-		return;
+		errno = 0;
+		return 1;
 	}
-	if (!strcmp(query, "")) return;
 
 //	printf("Received: %s, bytes = %d, cmp = %d\n", query, bytes, strcmp(query, ""));
 
@@ -129,6 +131,7 @@ void talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 	}
 
 	bytes = write(cfd[i], response, strlen(response) + 1);
+	return 1;
 }
 
 void run_server(sockaddr_in a, int sfd, FILE *f) {
@@ -149,7 +152,8 @@ void run_server(sockaddr_in a, int sfd, FILE *f) {
 		for (int i = 0; i < num_clients; i++) {
 			if (FD_ISSET(cfd[i], &read_fds)) {
 				printf("Talking to client %d\n", i);
-				talk_to_client(i, cfd, &num_clients, f);
+				if (!talk_to_client(i, cfd, &num_clients, f))
+					--i;
 			}
 		}
 	}
