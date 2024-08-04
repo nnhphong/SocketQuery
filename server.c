@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <signal.h>
+#include <fcntl.h>
 #include "record.h"
 
 typedef struct sockaddr_in sockaddr_in;
@@ -50,6 +51,11 @@ int setup_server(sockaddr_in a, int my_port, char *ip_addr) {
 	}
 	
 	listen(sfd, 4096);
+
+	/*int opt = 1;
+	if (setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof opt) < 0){
+      
+    }*/	
 	return sfd;
 }
 
@@ -70,11 +76,18 @@ int max_fds(int sfd, int cfd[], int num_clients, fd_set *fd_reads) {
 	return mx;
 }
 
+void not_block(int fd) {
+	int flags = fcntl(fd, F_GETFL);
+	fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
+
 void add_new_client(int sfd, int *client_list, int *num_client, fd_set *fd_reads) {
 	sockaddr_in ca;
 	int sin_len = sizeof(sockaddr_in);
 	int new_cfd = accept(sfd, (struct sockaddr*)&ca, &sin_len);
 	
+	not_block(new_cfd);
 	FD_SET(new_cfd, fd_reads);
 	client_list[*num_client] = new_cfd;
 	(*num_client)++;
@@ -96,15 +109,19 @@ void talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 	int bytes;
 	
 	memset(query, 0, sizeof(query));
+	printf("server is reading..\n");
 	bytes = read(cfd[i], query, sizeof(query));
+	printf("server finish reading!\n");
 	if (bytes <= 0) {
-		fprintf(stderr, "ERRNO read %d: %s\n", errno, strerror(errno));
-		delete_client(cfd, i, num_clients);
+		if (errno != EAGAIN) {
+			fprintf(stderr, "ERRNO read %d: %s\n", errno, strerror(errno));
+			delete_client(cfd, i, num_clients);
+		}
 		return;
 	}
 	if (!strcmp(query, "")) return;
 
-	printf("Received: %s, bytes = %d, cmp = %d\n", query, bytes, strcmp(query, ""));
+//	printf("Received: %s, bytes = %d, cmp = %d\n", query, bytes, strcmp(query, ""));
 
 	strcpy(response, "none\n");
 	if (get_sunspots(f, query, &ret)) {
