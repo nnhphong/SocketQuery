@@ -27,11 +27,6 @@ int join_network(sockaddr_in a, int my_port, char *ip_addr) {
 	return cfd;
 }
 
-void not_block(int fd) {
-	int flags = fcntl(fd, F_GETFL);
-	fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-}
-
 void communicate(int cfd) {
 	char name[31];
 	char resp[11];
@@ -63,6 +58,5 @@ int main(int argc, char *argv[]) {
 
 	sscanf(argv[2], "%d", &my_port);
 	int cfd = join_network(a, my_port, argv[1]); 
-	//not_block(cfd);
 	communicate(cfd);	
 }
