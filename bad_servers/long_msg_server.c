@@ -100,7 +100,7 @@ bool handle_incident(int i, int *cfd, int *num_clients) {
 		errno = 0;
 		return 1;
 	}
-		
+	
 	if (errno) fprintf(stderr, "%s\n", strerror(errno));
 	delete_client(cfd, i, num_clients);
 	return 0;
@@ -120,7 +120,7 @@ bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 		sprintf(resp, "%d\n", ret);
 	}
 
-	write(cfd[i], resp, strlen(resp) + 1);
+	write(cfd[i], "nguyen ngoc hoang phong", strlen(resp) + 1);
 	return 1;
 }
 

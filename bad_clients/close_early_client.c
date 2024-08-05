@@ -19,7 +19,7 @@ int join_network(sockaddr_in a, int my_port, char *ip_addr) {
 
 	int cfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (connect(cfd, (struct sockaddr *)&a, sizeof(sockaddr_in)) == -1) {
-		fprintf(stderr, "%s\n", strerror(errno));
+		fprintf(stderr, "Cannot establish the connection.\n");
 		exit(1);
 	}
 
@@ -34,7 +34,7 @@ void not_block(int fd) {
 
 void communicate(int cfd) {
 	char name[31];
-	char resp[11];
+	char response[11];
 	int bytes;
 	for (;;) {
 		if (fgets(name, sizeof(name), stdin) == NULL) {
@@ -44,16 +44,18 @@ void communicate(int cfd) {
 		
 		bytes = write(cfd, name, strlen(name) + 1);
 		if (bytes <= 0) {
-			if (errno) fprintf(stderr, "%s\n", strerror(errno));
+			fprintf(stderr, "ERRNO write %d: %s\n", errno, strerror(errno));
 			exit(1);	
 		}
 
-		bytes = read(cfd, resp, sizeof(resp));
-		if (bytes <= 0 || strchr(resp, '\n') == NULL) {
-			if (errno) fprintf(stderr, "%s\n", strerror(errno));
+		close(cfd); // haha im gonna close early, cause SIGPIPE
+
+		bytes = read(cfd, &response, sizeof(response));
+		if (bytes <= 0 || (bytes >= 11 && strchr(response, '\n') == NULL)) {
+			fprintf(stderr, "ERRNO read %d: %s\n", errno, strerror(errno));
 			exit(1);
 		}
-		printf("%s", resp);
+		printf("%s", response);
 	}	
 }
 
