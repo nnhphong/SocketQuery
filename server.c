@@ -20,16 +20,18 @@ void ignore_sigpipe() {
 	sigaction(SIGPIPE, &myaction, NULL);
 }
 
-int get_sunspots(FILE *f, const char *name, unsigned short *psunspots) {  
+int get_sunspots(FILE *f, char *name, unsigned short *psunspots) {  
  	if (fseek(f, 0, SEEK_SET) == -1) {  
     	perror("Error: cannot seek to the beginning");  
     	return 0;  
 	}  
-   
+   	
+	name[strlen(name) - 1] = '\0';
 	for (record rec; fread(&rec, sizeof(rec), 1, f) == 1; ) {  
     	char rname[100];  
     	snprintf(rname, rec.name_len + 1, "%s", rec.name);  
-    	if (strncmp(rname, name, sizeof(name)) == 0) {  
+		//printf("%s %s %d\n", rname, name, strcmp(rname, name));
+    	if (strcmp(rname, name) == 0) {  
         	*psunspots = rec.sunspots;  
         	return 1;  
     	}  
@@ -88,6 +90,7 @@ void add_new_client(int sfd, int *client_list, int *num_client, fd_set *fd_reads
 
 	client_list[*num_client] = new_cfd;
 	(*num_client)++;
+
 //	print_client_address("Got client", &ca);
 }
 
@@ -107,6 +110,7 @@ bool handle_incident(int i, int *cfd, int *num_clients) {
 	}
 		
 	fprintf(stderr, "ERRNO read %d: %s\n", errno, strerror(errno));
+	printf("deleting that client %d now..\n", i);
 	delete_client(cfd, i, num_clients);
 	return 0;
 }
@@ -117,7 +121,7 @@ bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 	char resp[11] = "none\n";
 	
 	int bytes = read(cfd[i], q, sizeof(q));
-	if (bytes <= 0 || (bytes >= 30 && strchr(resp, '\n') == NULL) || !strcmp(q, "")) {
+	if (bytes <= 0 || strchr(q, '\n') == NULL || !strcmp(q, "")) {
 		return handle_incident(i, cfd, num_clients);
 	}
 
