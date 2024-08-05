@@ -19,7 +19,7 @@ int join_network(sockaddr_in a, int my_port, char *ip_addr) {
 
 	int cfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (connect(cfd, (struct sockaddr *)&a, sizeof(sockaddr_in)) == -1) {
-		fprintf(stderr, "Cannot establish the connection.\n");
+		fprintf(stderr, "%s\n", strerror(errno));
 		exit(1);
 	}
 
@@ -33,9 +33,29 @@ void not_block(int fd) {
 }
 
 void communicate(int cfd) {
-	// disconnect abruptly
-	sleep(2);
-	close(cfd);
+	char name[31];
+	char resp[11];
+	int bytes;
+	for (;;) {
+		if (fgets(name, sizeof(name), stdin) == NULL) {
+			close(cfd);
+			exit(0);
+		}
+		
+		bytes = write(cfd, name, strlen(name) + 1);
+		if (bytes <= 0) {
+			if (errno) fprintf(stderr, "%s\n", strerror(errno));
+			exit(1);	
+		}
+		
+		sleep(100000); // im chilling out forever hehe
+		bytes = read(cfd, resp, sizeof(resp));
+		if (bytes <= 0 || strchr(resp, '\n') == NULL) {
+			if (errno) fprintf(stderr, "%s\n", strerror(errno));
+			exit(1);
+		}
+		printf("%s", resp);
+	}	
 }
 
 int main(int argc, char *argv[]) {

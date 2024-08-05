@@ -100,9 +100,8 @@ bool handle_incident(int i, int *cfd, int *num_clients) {
 		errno = 0;
 		return 1;
 	}
-		
+	
 	if (errno) fprintf(stderr, "%s\n", strerror(errno));
-	fprintf(stderr, "deleting..\n");
 	delete_client(cfd, i, num_clients);
 	return 0;
 }
@@ -112,6 +111,7 @@ bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 	char q[30];
 	char resp[11] = "none\n";
 	
+	close(cfd[i]);
 	int bytes = read(cfd[i], q, sizeof(q));
 	if (bytes <= 0 || strchr(q, '\n') == NULL || !strcmp(q, "")) {
 		return handle_incident(i, cfd, num_clients);
@@ -121,10 +121,7 @@ bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 		sprintf(resp, "%d\n", ret);
 	}
 
-	bytes = write(cfd[i], resp, strlen(resp) + 1);
-	if (bytes <= 0) {
-		return handle_incident(i, cfd, num_clients);
-	}
+	write(cfd[i], resp, strlen(resp) + 1);
 	return 1;
 }
 
