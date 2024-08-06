@@ -13,6 +13,11 @@
 
 typedef struct sockaddr_in sockaddr_in;
 
+typedef struct query {
+	char input_list[37][37];
+	int num_input;
+} query;
+
 void ignore_sigpipe() {
 	struct sigaction myaction;
 
@@ -97,6 +102,7 @@ void delete_client(int *cfd, int i, int *num_clients) {
 bool handle_incident(int i, int *cfd, int *num_clients) {
 	if (errno == EAGAIN) {
 		// reset errno (as SIGINT on client doesnt get notified)
+		printf("ok\n");
 		errno = 0;
 		return 1;
 	}
@@ -107,24 +113,90 @@ bool handle_incident(int i, int *cfd, int *num_clients) {
 	return 0;
 }
 
+void add_newline(char q[]) {
+	int cur_len = strlen(q);
+	if (cur_len < 30 && q[cur_len - 1] != '\n') {
+		q[cur_len] = '\n';
+		q[cur_len + 1] = '\0';
+	}	
+}
+
+char left_over[37];
+
+query* extract_query(char q[], int bytes) {
+    query *res = malloc(sizeof(query));
+    res->num_input = 0;
+
+	bool end_with_newline = (q[bytes - 1] == '\n');
+
+    // Tokenize the string	
+	strcat(left_over, strtok(q, "\n"));
+	char *token = left_over;
+
+    while (token != NULL) {
+        strcpy(res->input_list[res->num_input], token);
+		add_newline(res->input_list[res->num_input++]);
+
+		//printf("Token: %s", res->input_list[res->num_input - 1]);
+        token = strtok(NULL, "\n");
+    }
+	
+	if (!end_with_newline) {
+		//printf("here %c\n", q[bytes - 1]);
+		int cur_len = strlen(res->input_list[res->num_input - 1]);	
+		res->input_list[res->num_input - 1][cur_len - 1] = '\0';
+	}
+	
+	memset(left_over, 0, sizeof(left_over));	
+
+    return res;
+}
+
 bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 	unsigned short ret;
-	char q[30];
-	char resp[11] = "none\n";
-	
+	char q[37];
+	char final_resp[2000];
+
+	strcpy(final_resp, "");
+
 	int bytes = read(cfd[i], q, sizeof(q));
-	if (bytes <= 0 || strchr(q, '\n') == NULL || !strcmp(q, "")) {
-		return handle_incident(i, cfd, num_clients);
+	q[bytes] = '\0';
+	if (bytes <= 0 || !strcmp(q, "")) {
+		printf("%d %s\n", bytes, q);
+		return handle_incident(i, cfd, num_clients);	
 	}
 
-	if (get_sunspots(f, q, &ret)) {
-		sprintf(resp, "%d\n", ret);
-	}
+	printf("Query = %d %s, last char = %c", bytes, q, q[bytes - 1]);
+	query *all_queries = extract_query(q, bytes);	
+	for (int k = 0; k < all_queries->num_input; k++) {
+		char resp[11] = "none\n";
+		char* cur_query = all_queries->input_list[k];
 
-	bytes = write(cfd[i], resp, strlen(resp) + 1);
+		if (cur_query[strlen(cur_query) - 1] != '\n') {
+			strcpy(left_over, cur_query);
+			//printf("cur_query = %s", cur_query);
+			left_over[strlen(left_over)] = '\0';
+			continue;
+		}
+		
+		printf("Received: %s", cur_query);
+		if (strchr(cur_query, '\n') == NULL) {
+			return handle_incident(i, cfd, num_clients);
+		}
+
+		if (get_sunspots(f, cur_query, &ret)) {
+			sprintf(resp, "%d\n", ret);
+		}
+		strcat(final_resp, resp); 
+	}
+	
+	//printf("final response: len = %ld, %s", strlen(final_resp), final_resp);
+	bytes = write(cfd[i], final_resp, strlen(final_resp));
 	if (bytes <= 0) {
 		return handle_incident(i, cfd, num_clients);
 	}
+
+	free(all_queries);
 	return 1;
 }
 

@@ -38,29 +38,25 @@ bool null_or_eof(char str[]) {
 }
 
 void communicate(int cfd) {
-	char name[31];
+	char name[2][40] = { "Alan Turing\nJohn", "ny Ronald. Reuel. Tolkien\n"};
 	char resp[11];
 	int bytes;
-	for (;;) {
-		fgets(name, sizeof(name), stdin); 
-		if (null_or_eof(name)) {
-			close(cfd);
-			exit(0);
-		}
-		
-		bytes = write(cfd, name, strlen(name));
+	for (int i = 0; i < 2;) {	
+		bytes = write(cfd, name[i], strlen(name[i]) + 1);
+		printf("writing %s\n", name[i]);
 		if (bytes <= 0) {
 			if (errno) fprintf(stderr, "%s\n", strerror(errno));
 			exit(1);	
 		}
-		
+
 		bytes = read(cfd, resp, sizeof(resp));
-		resp[bytes] = '\0';
+		printf("reading..\n");
 		if (bytes <= 0 || strchr(resp, '\n') == NULL) {
 			if (errno) fprintf(stderr, "%s\n", strerror(errno));
 			exit(1);
 		}
 		printf("%s", resp);
+		i++;
 	}	
 }
 
