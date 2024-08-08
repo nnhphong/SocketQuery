@@ -112,12 +112,10 @@ int top = 0, cur = 0;
 
 int read_from_client(int i, int *cfd, char *q, int *num_clients) {
 	int len = strlen(left_over[top]);
-	//printf("Reading...\n");
 	char buffer[31];
 	bool found = 0;
 	do {
 		int bytes = read(cfd[i], buffer, 30);
-		//printf("errno: %d %s %d\n", errno, strerror(errno), len);
 		
 		// handle SIGINT and unexpected error case	
 		if (len == 0 && bytes <= 0 && !(len > 0 && errno == EAGAIN)) {
@@ -136,14 +134,6 @@ int read_from_client(int i, int *cfd, char *q, int *num_clients) {
 			}
 
 			if (len > 30) {
-				/*len++;
-				if (len > 60) {
-					// repeat forever
-					found = true;
-					break;
-				}
-				continue;*/
-				printf("%s\n", left_over[top]);
 				found = true;
 				top++;
 				break;
@@ -157,15 +147,6 @@ int read_from_client(int i, int *cfd, char *q, int *num_clients) {
 }
 
 int write_to_client(int i, int *cfd, char *resp, int *num_clients) {
-	//printf("Writing...%s\n", resp);	
-	/*int need_to_write = strlen(resp);
-	do {
-		int bytes = write(cfd[i], &resp[strlen(resp) - need_to_write], 1);
-		if (bytes == -1) {
-			return handle_incident(i, cfd, num_clients);
-		}	
-		need_to_write -= bytes;
-	} while (need_to_write);*/
 	int bytes = write(cfd[i], resp, strlen(resp));
 	if (bytes == -1) {
 		return handle_incident(i, cfd, num_clients);
@@ -183,10 +164,7 @@ bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 		return code;
 	}
 	
-	//printf("%d %d\n", cur, top);
 	for (int k = cur; k <= top; k++) {
-	//	printf("%s %ld\n", left_over[i], strlen(left_over[i]));
-		
 		if (strchr(left_over[k], '\n') == NULL) {
 			if (strlen(left_over[k]) < 30) break;
 			
