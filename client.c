@@ -45,6 +45,7 @@ void ignore_sigpipe() {
 	sigaction(SIGPIPE, &myaction, NULL);
 }
 
+<<<<<<< HEAD
 void write_to_server(int cfd, char name[]) {
 	int need_to_write = strlen(name);
 	do {
@@ -55,16 +56,28 @@ void write_to_server(int cfd, char name[]) {
 		}
 		need_to_write -= bytes;
 	} while (need_to_write);	
+=======
+void exit_sigpipe(int sig) {
+    fprintf(stderr, "Received SIGPIPE: The connection has been closed.\n");
+    exit(EXIT_FAILURE);
+>>>>>>> 1c2f741 (update: client.c)
 }
 
 void read_from_server(int cfd, char *resp) {
-	char c = '.';
-	int bytes, len = 0;
+	char buffer[12];
+	int len = 0;
+	bool found = false;
+
 	do {
-		int bytes = read(cfd, &c, 1);
-		if (len == 0 && bytes <= 0) {
+		int bytes = read(cfd, buffer, 11);	
+		if (bytes == 0) {
+			fprintf(stderr, "Server disconnected!\n");
+			exit(1);
+		}
+
+		if (bytes == -1) {
 			if (errno == EAGAIN) continue;
-			if (errno) fprintf(stderr, "%s\n", strerror(errno));
+			fprintf(stderr, "%s\n", strerror(errno));
 			exit(1);
 		}
 
@@ -72,25 +85,37 @@ void read_from_server(int cfd, char *resp) {
 			fprintf(stderr, "Message too long! Server bug\n");
 			exit(1);
 		}
-		if (bytes > 0) {
-			resp[len++] = c;
+		
+		for (int i = len; i < len + bytes; i++) {
+			resp[i] = buffer[i - len];
+			if (resp[i] == '\n') found = true;
 		}
-	} while (c != '\n');
-
+		len += bytes;
+	} while (!found);
 	resp[len] = '\0';
+}
+
+void write_to_server(int cfd, char *name) {
+	int bytes = write(cfd, name, strlen(name));
+	if (bytes == -1) {
+		fprintf(stderr, "%s\n", strerror(errno));
+		exit(1);
+	}
 }
 
 void communicate(int cfd) {
 	char name[37];
-	char resp[11];
+	char resp[11] = "";
 	int bytes;
 	
 	for (; fgets(name, sizeof(name), stdin) != NULL;) {
 		if (null_or_eof(name)) {
+			fprintf(stderr, "closing this client..\n");
 			close(cfd);
 			exit(0);
 		}
 		
+		strcpy(resp, "");
 		write_to_server(cfd, name);		
 		read_from_server(cfd, resp);		
 		printf("%s", resp);
@@ -104,6 +129,5 @@ int main(int argc, char *argv[]) {
 	sscanf(argv[2], "%d", &my_port);
 	int cfd = join_network(a, my_port, argv[1]); 
 	ignore_sigpipe();
-	not_block(cfd);
 	communicate(cfd);
 }
