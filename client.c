@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#include <signal.h>
 
 typedef struct sockaddr_in sockaddr_in;
 
@@ -37,6 +38,13 @@ bool null_or_eof(char str[]) {
 	return (str == NULL || (strlen(str) == 1 && str[0] == '\n'));
 }
 
+void ignore_sigpipe() {
+	struct sigaction myaction;
+
+	myaction.sa_handler = SIG_IGN;
+	sigaction(SIGPIPE, &myaction, NULL);
+}
+
 void communicate(int cfd) {
 	char name[31];
 	char resp[11];
@@ -48,15 +56,38 @@ void communicate(int cfd) {
 			exit(0);
 		}
 		
-		bytes = write(cfd, name, strlen(name));
+		int need_to_write = strlen(name);
+		do {
+			int bytes = write(cfd, &name[strlen(name) - need_to_write], 1);
+			if (bytes == -1) {
+				fprintf(stderr, "%s\n", strerror(errno));
+				exit(1);
+			}
+			need_to_write -= bytes;
+		} while (need_to_write);	
+		/*bytes = write(cfd, name, strlen(name));
 		if (bytes <= 0) {
+			if (errno == EAGAIN) continue;
 			if (errno) fprintf(stderr, "%s\n", strerror(errno));
 			exit(1);	
-		}
+		}*/
 		
-		bytes = read(cfd, resp, sizeof(resp));
-		resp[bytes] = '\0';
-		if (bytes <= 0 || strchr(resp, '\n') == NULL) {
+		char c = '.';
+		int bytes, len = 0;
+		do {
+			int bytes = read(cfd, &c, 1);
+			if (len >= 11) {
+				fprintf(stderr, "Message too long! Server bug\n");
+				exit(1);
+			}
+			if (bytes > 0) {
+				resp[len++] = c;
+			}
+		} while (c != '\n');
+
+		resp[len] = '\0';
+		if (len == 0 && bytes <= 0) {
+			if (errno == EAGAIN) continue;
 			if (errno) fprintf(stderr, "%s\n", strerror(errno));
 			exit(1);
 		}
@@ -70,6 +101,7 @@ int main(int argc, char *argv[]) {
 
 	sscanf(argv[2], "%d", &my_port);
 	int cfd = join_network(a, my_port, argv[1]); 
-	//not_block(cfd);
+	ignore_sigpipe();
+	not_block(cfd);
 	communicate(cfd);	
 }

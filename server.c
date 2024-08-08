@@ -102,7 +102,7 @@ void delete_client(int *cfd, int i, int *num_clients) {
 bool handle_incident(int i, int *cfd, int *num_clients) {
 	if (errno == EAGAIN) {
 		// reset errno (as SIGINT on client doesnt get notified)
-		printf("ok\n");
+		fprintf(stderr, "ok\n");
 		errno = 0;
 		return 1;
 	}
@@ -155,48 +155,47 @@ query* extract_query(char q[], int bytes) {
 bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 	unsigned short ret;
 	char q[37];
-	char final_resp[2000];
+	char resp[14] = "none\n";	
+	char c;
+	int len = 0;
 
-	strcpy(final_resp, "");
-
-	int bytes = read(cfd[i], q, sizeof(q));
-	q[bytes] = '\0';
-	if (bytes <= 0 || !strcmp(q, "")) {
-		printf("%d %s\n", bytes, q);
-		return handle_incident(i, cfd, num_clients);	
-	}
-
-	printf("Query = %d %s, last char = %c", bytes, q, q[bytes - 1]);
-	query *all_queries = extract_query(q, bytes);	
-	for (int k = 0; k < all_queries->num_input; k++) {
-		char resp[11] = "none\n";
-		char* cur_query = all_queries->input_list[k];
-
-		if (cur_query[strlen(cur_query) - 1] != '\n') {
-			strcpy(left_over, cur_query);
-			//printf("cur_query = %s", cur_query);
-			left_over[strlen(left_over)] = '\0';
-			continue;
-		}
+	printf("Reading...\n");
+	do {
+		int bytes = read(cfd[i], &c, 1);
+		//printf("errno: %d %s %d\n", errno, strerror(errno), len);
 		
-		printf("Received: %s", cur_query);
-		if (strchr(cur_query, '\n') == NULL) {
+		// handle SIGINT and unexpected error case	
+		if (len == 0 && bytes <= 0 && !(len > 0 && errno == EAGAIN)) {
+			//printf("in?\n");
+			return handle_incident(i, cfd, num_clients);
+		}	
+
+		if (len > 30) {
+			fprintf(stderr, "Message too long! Imma close this client\n");
+			//close(cfd[i]);
 			return handle_incident(i, cfd, num_clients);
 		}
-
-		if (get_sunspots(f, cur_query, &ret)) {
-			sprintf(resp, "%d\n", ret);
+		
+		if (bytes > 0) {
+			//printf("%d\n", len);
+			q[len++] = c;
 		}
-		strcat(final_resp, resp); 
-	}
-	
-	//printf("final response: len = %ld, %s", strlen(final_resp), final_resp);
-	bytes = write(cfd[i], final_resp, strlen(final_resp));
-	if (bytes <= 0) {
-		return handle_incident(i, cfd, num_clients);
-	}
+	} while (c != '\n');
+	q[len] = '\0';
 
-	free(all_queries);
+	if (get_sunspots(f, q, &ret)) {
+		sprintf(resp, "%d\n", ret);		
+	}	
+	
+	printf("Writing...%s\n", resp);	
+	int need_to_write = strlen(resp);
+	do {
+		int bytes = write(cfd[i], &resp[strlen(resp) - need_to_write], 1);
+		if (bytes == -1) {
+			return handle_incident(i, cfd, num_clients);
+		}	
+		need_to_write -= bytes;
+	} while (need_to_write);
 	return 1;
 }
 
@@ -209,16 +208,19 @@ void run_server(sockaddr_in a, int sfd, FILE *f) {
 		FD_ZERO(&read_fds);
 		FD_SET(sfd, &read_fds);
 		int max_fd = max_fds(sfd, cfd, num_clients, &read_fds);
-
+		
 		while (select(max_fd + 1, &read_fds, NULL, NULL, NULL) == -1) {}
+	
 		if (FD_ISSET(sfd, &read_fds)) {
 			add_new_client(sfd, cfd, &num_clients, &read_fds);
 		}
-
+		
+		printf("About to talk..\n");
 		for (int i = 0; i < num_clients; i++) {
 			if (!FD_ISSET(cfd[i], &read_fds)) continue;
 			i -= (!talk_to_client(i, cfd, &num_clients, f));
 		}
+		printf("Done talking...\n");
 	}
 }
 
