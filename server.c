@@ -97,7 +97,6 @@ void delete_client(int *cfd, int i, int *num_clients) {
 bool handle_incident(int i, int *cfd, int *num_clients) {
 	if (errno == EAGAIN) {
 		// reset errno (as SIGINT on client doesnt get notified)
-		//fprintf(stderr, "ok\n");
 		errno = 0;
 		return 1;
 	}
@@ -108,65 +107,106 @@ bool handle_incident(int i, int *cfd, int *num_clients) {
 	return 0;
 }
 
+char left_over[500][40] = { "" };
+int top = 0, cur = 0;
+
 int read_from_client(int i, int *cfd, char *q, int *num_clients) {
-	char c;
-	int len = 0;
+	int len = strlen(left_over[top]);
 	//printf("Reading...\n");
+	char buffer[31];
+	bool found = 0;
 	do {
-		int bytes = read(cfd[i], &c, 1);
+		int bytes = read(cfd[i], buffer, 30);
 		//printf("errno: %d %s %d\n", errno, strerror(errno), len);
 		
 		// handle SIGINT and unexpected error case	
 		if (len == 0 && bytes <= 0 && !(len > 0 && errno == EAGAIN)) {
-			//printf("in?\n");
 			return handle_incident(i, cfd, num_clients);
 		}	
-
-		if (len > 30) {
-			fprintf(stderr, "Message too long! Imma close this client\n");
-			delete_client(cfd, i, num_clients);
-			return 0;	
-		}
 		
-		if (bytes > 0) {
-			q[len++] = c;
+		for (int i = 0; i < bytes; i++) {	
+			if (buffer[i] == '\n') {
+				if (len <= 30) {
+					left_over[top][len] = '\n';
+				}
+				top++;
+				len = 0;
+				found = 1;
+				continue;
+			}
+
+			if (len > 30) {
+				/*len++;
+				if (len > 60) {
+					// repeat forever
+					found = true;
+					break;
+				}
+				continue;*/
+				printf("%s\n", left_over[top]);
+				found = true;
+				top++;
+				break;
+			}
+			
+			left_over[top][len] = buffer[i];
+			len++;
 		}
-	} while (c != '\n');
-	q[len] = '\0';
+	} while (!found);
 	return -1;
 }
 
 int write_to_client(int i, int *cfd, char *resp, int *num_clients) {
 	//printf("Writing...%s\n", resp);	
-	int need_to_write = strlen(resp);
+	/*int need_to_write = strlen(resp);
 	do {
 		int bytes = write(cfd[i], &resp[strlen(resp) - need_to_write], 1);
 		if (bytes == -1) {
 			return handle_incident(i, cfd, num_clients);
 		}	
 		need_to_write -= bytes;
-	} while (need_to_write);
+	} while (need_to_write);*/
+	int bytes = write(cfd[i], resp, strlen(resp));
+	if (bytes == -1) {
+		return handle_incident(i, cfd, num_clients);
+	}
 	return -1;
 }
 
 bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 	unsigned short ret;
 	char q[37];
-	char resp[14] = "none\n";	
+	char resp[1024] = "none\n";	
 	int code;
 
 	if ((code = read_from_client(i, cfd, q, num_clients)) != -1) {
 		return code;
 	}
 	
-	if (get_sunspots(f, q, &ret)) {
-		sprintf(resp, "%d\n", ret);		
-	}	
+	//printf("%d %d\n", cur, top);
+	for (int k = cur; k <= top; k++) {
+	//	printf("%s %ld\n", left_over[i], strlen(left_over[i]));
+		
+		if (strchr(left_over[k], '\n') == NULL) {
+			if (strlen(left_over[k]) < 30) break;
+			
+			cur = k + 1;
+			fprintf(stderr, "Message too long! Imma close this client\n");
+			delete_client(cfd, i, num_clients);
+			return 0;
+		}
+		cur = k + 1;
+		
+		strcpy(q, left_over[k]);
+		strcpy(resp, "none\n");
+		if (get_sunspots(f, q, &ret)) {
+			sprintf(resp, "%d\n", ret);		
+		}	
 	
-	if ((code = write_to_client(i, cfd, resp, num_clients)) != -1) {
-		return code;
-	}
-
+		if ((code = write_to_client(i, cfd, resp, num_clients)) != -1) {
+			return code;
+		}
+	}	
 	return 1;
 }
 
@@ -186,12 +226,10 @@ void run_server(sockaddr_in a, int sfd, FILE *f) {
 			add_new_client(sfd, cfd, &num_clients, &read_fds);
 		}
 		
-		//printf("About to talk..\n");
 		for (int i = 0; i < num_clients; i++) {
 			if (!FD_ISSET(cfd[i], &read_fds)) continue;
 			i -= (!talk_to_client(i, cfd, &num_clients, f));
 		}
-		//printf("Done talking...\n");
 	}
 }
 

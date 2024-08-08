@@ -50,7 +50,7 @@ void write_to_server(int cfd, char name[]) {
 	do {
 		int bytes = write(cfd, &name[strlen(name) - need_to_write], 1);
 		if (bytes == -1) {
-			fprintf(stderr, "%s\n", strerror(errno));
+			fprintf(stderr, "SIGPIPE %s\n", strerror(errno));
 			exit(1);
 		}
 		need_to_write -= bytes;
