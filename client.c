@@ -45,31 +45,9 @@ void ignore_sigpipe() {
 	sigaction(SIGPIPE, &myaction, NULL);
 }
 
-void write_to_server(int cfd, char name[]) {
-	int need_to_write = strlen(name);
-	do {
-		int bytes = write(cfd, &name[strlen(name) - need_to_write], 1);
-		if (bytes == -1) {
-			fprintf(stderr, "SIGPIPE %s\n", strerror(errno));
-			exit(1);
-		}
-		need_to_write -= bytes;
-	} while (need_to_write);	
-}
 void exit_sigpipe(int sig) {
     fprintf(stderr, "Received SIGPIPE: The connection has been closed.\n");
     exit(EXIT_FAILURE);
-}
-void write_to_server(int cfd, char name[]) {
-	int need_to_write = strlen(name);
-	do {
-		int bytes = write(cfd, &name[strlen(name) - need_to_write], 1);
-		if (bytes == -1) {
-			fprintf(stderr, "SIGPIPE %s\n", strerror(errno));
-			exit(1);
-		}
-		need_to_write -= bytes;
-	} while (need_to_write);	
 }
 
 void read_from_server(int cfd, char *resp) {
