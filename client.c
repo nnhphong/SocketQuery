@@ -46,6 +46,7 @@ void ignore_sigpipe() {
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 void write_to_server(int cfd, char name[]) {
 	int need_to_write = strlen(name);
 	do {
@@ -61,6 +62,23 @@ void exit_sigpipe(int sig) {
     fprintf(stderr, "Received SIGPIPE: The connection has been closed.\n");
     exit(EXIT_FAILURE);
 >>>>>>> 1c2f741 (update: client.c)
+=======
+void exit_sigpipe(int sig) {
+    fprintf(stderr, "Received SIGPIPE: The connection has been closed.\n");
+    exit(EXIT_FAILURE);
+=======
+void write_to_server(int cfd, char name[]) {
+	int need_to_write = strlen(name);
+	do {
+		int bytes = write(cfd, &name[strlen(name) - need_to_write], 1);
+		if (bytes == -1) {
+			fprintf(stderr, "SIGPIPE %s\n", strerror(errno));
+			exit(1);
+		}
+		need_to_write -= bytes;
+	} while (need_to_write);	
+>>>>>>> 84f9e3c (feat: fix read method by chunk)
+>>>>>>> d15cfff (feat: fix read method by chunk)
 }
 
 void read_from_server(int cfd, char *resp) {
