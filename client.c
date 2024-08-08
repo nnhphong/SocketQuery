@@ -45,52 +45,54 @@ void ignore_sigpipe() {
 	sigaction(SIGPIPE, &myaction, NULL);
 }
 
-void communicate(int cfd) {
-	char name[31];
-	char resp[11];
-	int bytes;
-	for (;;) {
-		fgets(name, sizeof(name), stdin); 
-		if (null_or_eof(name)) {
-			close(cfd);
-			exit(0);
+void write_to_server(int cfd, char name[]) {
+	int need_to_write = strlen(name);
+	do {
+		int bytes = write(cfd, &name[strlen(name) - need_to_write], 1);
+		if (bytes == -1) {
+			fprintf(stderr, "%s\n", strerror(errno));
+			exit(1);
 		}
-		
-		int need_to_write = strlen(name);
-		do {
-			int bytes = write(cfd, &name[strlen(name) - need_to_write], 1);
-			if (bytes == -1) {
-				fprintf(stderr, "%s\n", strerror(errno));
-				exit(1);
-			}
-			need_to_write -= bytes;
-		} while (need_to_write);	
-		/*bytes = write(cfd, name, strlen(name));
-		if (bytes <= 0) {
-			if (errno == EAGAIN) continue;
-			if (errno) fprintf(stderr, "%s\n", strerror(errno));
-			exit(1);	
-		}*/
-		
-		char c = '.';
-		int bytes, len = 0;
-		do {
-			int bytes = read(cfd, &c, 1);
-			if (len >= 11) {
-				fprintf(stderr, "Message too long! Server bug\n");
-				exit(1);
-			}
-			if (bytes > 0) {
-				resp[len++] = c;
-			}
-		} while (c != '\n');
+		need_to_write -= bytes;
+	} while (need_to_write);	
+}
 
-		resp[len] = '\0';
+void read_from_server(int cfd, char *resp) {
+	char c = '.';
+	int bytes, len = 0;
+	do {
+		int bytes = read(cfd, &c, 1);
 		if (len == 0 && bytes <= 0) {
 			if (errno == EAGAIN) continue;
 			if (errno) fprintf(stderr, "%s\n", strerror(errno));
 			exit(1);
 		}
+
+		if (len > 11) {
+			fprintf(stderr, "Message too long! Server bug\n");
+			exit(1);
+		}
+		if (bytes > 0) {
+			resp[len++] = c;
+		}
+	} while (c != '\n');
+
+	resp[len] = '\0';
+}
+
+void communicate(int cfd) {
+	char name[37];
+	char resp[11];
+	int bytes;
+	
+	for (; fgets(name, sizeof(name), stdin) != NULL;) {
+		if (null_or_eof(name)) {
+			close(cfd);
+			exit(0);
+		}
+		
+		write_to_server(cfd, name);		
+		read_from_server(cfd, resp);		
 		printf("%s", resp);
 	}	
 }
@@ -103,5 +105,5 @@ int main(int argc, char *argv[]) {
 	int cfd = join_network(a, my_port, argv[1]); 
 	ignore_sigpipe();
 	not_block(cfd);
-	communicate(cfd);	
+	communicate(cfd);
 }

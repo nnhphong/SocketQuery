@@ -13,11 +13,6 @@
 
 typedef struct sockaddr_in sockaddr_in;
 
-typedef struct query {
-	char input_list[37][37];
-	int num_input;
-} query;
-
 void ignore_sigpipe() {
 	struct sigaction myaction;
 
@@ -102,7 +97,7 @@ void delete_client(int *cfd, int i, int *num_clients) {
 bool handle_incident(int i, int *cfd, int *num_clients) {
 	if (errno == EAGAIN) {
 		// reset errno (as SIGINT on client doesnt get notified)
-		fprintf(stderr, "ok\n");
+		//fprintf(stderr, "ok\n");
 		errno = 0;
 		return 1;
 	}
@@ -113,53 +108,10 @@ bool handle_incident(int i, int *cfd, int *num_clients) {
 	return 0;
 }
 
-void add_newline(char q[]) {
-	int cur_len = strlen(q);
-	if (cur_len < 30 && q[cur_len - 1] != '\n') {
-		q[cur_len] = '\n';
-		q[cur_len + 1] = '\0';
-	}	
-}
-
-char left_over[37];
-
-query* extract_query(char q[], int bytes) {
-    query *res = malloc(sizeof(query));
-    res->num_input = 0;
-
-	bool end_with_newline = (q[bytes - 1] == '\n');
-
-    // Tokenize the string	
-	strcat(left_over, strtok(q, "\n"));
-	char *token = left_over;
-
-    while (token != NULL) {
-        strcpy(res->input_list[res->num_input], token);
-		add_newline(res->input_list[res->num_input++]);
-
-		//printf("Token: %s", res->input_list[res->num_input - 1]);
-        token = strtok(NULL, "\n");
-    }
-	
-	if (!end_with_newline) {
-		//printf("here %c\n", q[bytes - 1]);
-		int cur_len = strlen(res->input_list[res->num_input - 1]);	
-		res->input_list[res->num_input - 1][cur_len - 1] = '\0';
-	}
-	
-	memset(left_over, 0, sizeof(left_over));	
-
-    return res;
-}
-
-bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
-	unsigned short ret;
-	char q[37];
-	char resp[14] = "none\n";	
+int read_from_client(int i, int *cfd, char *q, int *num_clients) {
 	char c;
 	int len = 0;
-
-	printf("Reading...\n");
+	//printf("Reading...\n");
 	do {
 		int bytes = read(cfd[i], &c, 1);
 		//printf("errno: %d %s %d\n", errno, strerror(errno), len);
@@ -172,22 +124,20 @@ bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 
 		if (len > 30) {
 			fprintf(stderr, "Message too long! Imma close this client\n");
-			//close(cfd[i]);
-			return handle_incident(i, cfd, num_clients);
+			delete_client(cfd, i, num_clients);
+			return 0;	
 		}
 		
 		if (bytes > 0) {
-			//printf("%d\n", len);
 			q[len++] = c;
 		}
 	} while (c != '\n');
 	q[len] = '\0';
+	return -1;
+}
 
-	if (get_sunspots(f, q, &ret)) {
-		sprintf(resp, "%d\n", ret);		
-	}	
-	
-	printf("Writing...%s\n", resp);	
+int write_to_client(int i, int *cfd, char *resp, int *num_clients) {
+	//printf("Writing...%s\n", resp);	
 	int need_to_write = strlen(resp);
 	do {
 		int bytes = write(cfd[i], &resp[strlen(resp) - need_to_write], 1);
@@ -196,6 +146,27 @@ bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
 		}	
 		need_to_write -= bytes;
 	} while (need_to_write);
+	return -1;
+}
+
+bool talk_to_client(int i, int *cfd, int *num_clients, FILE *f) {
+	unsigned short ret;
+	char q[37];
+	char resp[14] = "none\n";	
+	int code;
+
+	if ((code = read_from_client(i, cfd, q, num_clients)) != -1) {
+		return code;
+	}
+	
+	if (get_sunspots(f, q, &ret)) {
+		sprintf(resp, "%d\n", ret);		
+	}	
+	
+	if ((code = write_to_client(i, cfd, resp, num_clients)) != -1) {
+		return code;
+	}
+
 	return 1;
 }
 
@@ -215,12 +186,12 @@ void run_server(sockaddr_in a, int sfd, FILE *f) {
 			add_new_client(sfd, cfd, &num_clients, &read_fds);
 		}
 		
-		printf("About to talk..\n");
+		//printf("About to talk..\n");
 		for (int i = 0; i < num_clients; i++) {
 			if (!FD_ISSET(cfd[i], &read_fds)) continue;
 			i -= (!talk_to_client(i, cfd, &num_clients, f));
 		}
-		printf("Done talking...\n");
+		//printf("Done talking...\n");
 	}
 }
 
