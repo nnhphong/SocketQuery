@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdbool.h>
+#include <signal.h>
 
 typedef struct sockaddr_in sockaddr_in;
 
@@ -27,27 +29,82 @@ int join_network(sockaddr_in a, int my_port, char *ip_addr) {
 	return cfd;
 }
 
+void not_block(int fd) {
+	int flags = fcntl(fd, F_GETFL);
+	fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
+bool null_or_eof(char str[]) {
+	return (str == NULL || (strlen(str) == 1 && str[0] == '\n'));
+}
+
+void ignore_sigpipe() {
+	struct sigaction myaction;
+
+	myaction.sa_handler = SIG_IGN;
+	sigaction(SIGPIPE, &myaction, NULL);
+}
+
+void exit_sigpipe(int sig) {
+    fprintf(stderr, "Received SIGPIPE: The connection has been closed.\n");
+    exit(EXIT_FAILURE);
+}
+
+void read_from_server(int cfd, char *resp) {
+	char buffer[12];
+	int len = 0;
+	bool found = false;
+
+	do {
+		int bytes = read(cfd, buffer, 11);	
+		if (bytes == 0) {
+			fprintf(stderr, "Server disconnected!\n");
+			exit(1);
+		}
+
+		if (bytes == -1) {
+			if (errno == EAGAIN) continue;
+			fprintf(stderr, "%s\n", strerror(errno));
+			exit(1);
+		}
+
+		if (len > 11) {
+			fprintf(stderr, "Message too long! Server bug\n");
+			exit(1);
+		}
+		
+		for (int i = len; i < len + bytes; i++) {
+			resp[i] = buffer[i - len];
+			if (resp[i] == '\n') found = true;
+		}
+		len += bytes;
+	} while (!found);
+	resp[len] = '\0';
+}
+
+void write_to_server(int cfd, char *name) {
+	int bytes = write(cfd, name, strlen(name));
+	if (bytes == -1) {
+		fprintf(stderr, "%s\n", strerror(errno));
+		exit(1);
+	}
+}
+
 void communicate(int cfd) {
-	char name[31];
-	char resp[11];
+	char name[37];
+	char resp[11] = "";
 	int bytes;
-	for (;;) {
-		if (fgets(name, sizeof(name), stdin) == NULL) {
+	
+	for (; fgets(name, sizeof(name), stdin) != NULL;) {
+		if (null_or_eof(name)) {
+			fprintf(stderr, "closing this client..\n");
 			close(cfd);
 			exit(0);
 		}
 		
-		bytes = write(cfd, name, strlen(name) + 1);
-		if (bytes <= 0) {
-			if (errno) fprintf(stderr, "%s\n", strerror(errno));
-			exit(1);	
-		}
-
-		bytes = read(cfd, resp, sizeof(resp));
-		if (bytes <= 0 || strchr(resp, '\n') == NULL) {
-			if (errno) fprintf(stderr, "%s\n", strerror(errno));
-			exit(1);
-		}
+		strcpy(resp, "");
+		write_to_server(cfd, name);		
+		read_from_server(cfd, resp);		
 		printf("%s", resp);
 	}	
 }
@@ -58,5 +115,6 @@ int main(int argc, char *argv[]) {
 
 	sscanf(argv[2], "%d", &my_port);
 	int cfd = join_network(a, my_port, argv[1]); 
-	communicate(cfd);	
+	ignore_sigpipe();
+	communicate(cfd);
 }
