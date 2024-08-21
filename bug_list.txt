@@ -1,7 +1,0 @@
-Bug:
-Fixed: 
-- Can talk properly 1-1 relationship server-client
-- Start 2 clients at the same time (no read/write yet) -> server won't receive the second client
-- After shut down one client and connect another client -> server won't receive that new client
-- After one client shutdowns, the server output some random stuff
-- Fix bugs when comparing names in get_sunspots()

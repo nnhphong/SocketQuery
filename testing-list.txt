@@ -1,8 +1,0 @@
-1. client close while server is writing (caused SIGPIPE)
-2. server close while client is writing (caused SIGPIPE)
-3. client close while server is reading (bad file descriptors, close client ASAP)
-4. client chills out forever before reading (clogged the server's buffer), add some more
-client to talk to server
-5. client chills out before writing (let the server hangged) 
-6. client sends malformed data (something that server cannot interpret
-correctly)
